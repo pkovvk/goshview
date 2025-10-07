@@ -2,7 +2,7 @@
 <html lang="ru">
   <head>
     <meta charset="utf-8" />
-    <title>Решение от бота</title>
+    <title>Ответ бота</title>
     <meta name="viewport" content="width=device-width,initial-scale=1" />
     <style>
       html,
@@ -14,7 +14,6 @@
         background: url("background.png") center/cover no-repeat;
         color: #fff;
       }
-
       header {
         position: relative;
         width: 100%;
@@ -26,7 +25,6 @@
         overflow: hidden;
         backdrop-filter: blur(1px);
       }
-
       header::before {
         content: "";
         position: absolute;
@@ -40,22 +38,18 @@
           rgba(0, 0, 0, 0.7) 100%
         );
       }
-
       header > * {
         position: relative;
         z-index: 2;
       }
-
       .logo {
         height: 100px;
         width: auto;
         object-fit: contain;
       }
-
       main {
         padding: 10px;
       }
-
       pre {
         background: rgba(0, 0, 0, 0.3);
         backdrop-filter: blur(2px);
@@ -68,6 +62,8 @@
         word-break: break-word;
       }
     </style>
+    <!-- MathJax для LaTeX -->
+    <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
   </head>
   <body>
     <header>
@@ -78,16 +74,28 @@
       <pre id="answer">Загрузка...</pre>
     </main>
 
-    <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
     <script>
+      // Декодирование URL-safe base64 в UTF-8
+      function base64ToUtf8(str) {
+        str = str.replace(/-/g, "+").replace(/_/g, "/");
+        while (str.length % 4) str += "=";
+        const bytes = atob(str);
+        return new TextDecoder("utf-8").decode(
+          Uint8Array.from(bytes, (c) => c.charCodeAt(0))
+        );
+      }
+
       const params = new URLSearchParams(window.location.search);
       const data = params.get("data");
+
       if (data) {
         try {
-          // URL-safe base64 обратно в обычный
-          const decoded = atob(data.replace(/-/g, "+").replace(/_/g, "/"));
-          document.getElementById("answer").textContent = decoded;
-          MathJax.typeset(); // рендерим LaTeX
+          const decoded = base64ToUtf8(data);
+          const answerEl = document.getElementById("answer");
+          // Вставляем текст с LaTeX
+          answerEl.textContent = decoded;
+          // Рендерим формулы через MathJax
+          MathJax.typesetPromise([answerEl]);
         } catch (e) {
           document.getElementById("answer").textContent =
             "Ошибка декодирования данных.";
