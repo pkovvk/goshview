@@ -4,16 +4,21 @@
     <meta charset="utf-8" />
     <title>Ответ бота</title>
     <meta name="viewport" content="width=device-width,initial-scale=1" />
-
     <style>
       html,
       body {
         margin: 0;
         padding: 0;
-        height: 100%;
+        min-height: 100%;
         font-family: Arial, sans-serif;
-        background: url("background.png") center/cover no-repeat;
         color: #fff;
+        /* Фон дублируется по вертикали */
+        background-image: url("background.png");
+        background-position: top center;
+        background-repeat: repeat-y;
+        /* Растянуть по ширине и повторять по вертикали.
+           Если не нужно растягивать — замени на background-size: auto; */
+        background-size: 100% auto;
       }
 
       header {
@@ -53,22 +58,60 @@
       }
 
       main {
-        padding: 10px;
+        padding: 16px;
+        box-sizing: border-box;
       }
 
       #answer {
-        background: rgba(0, 0, 0, 0.3);
+        background: rgba(0, 0, 0, 0.35);
         backdrop-filter: blur(2px);
-        padding: 15px;
+        padding: 18px;
         border-radius: 8px;
         overflow-x: auto;
         font-size: 16px;
+        line-height: 1.5;
+        color: #fff;
+        /* чтобы длинные фрагменты переносились аккуратно */
         white-space: pre-wrap;
         word-break: break-word;
       }
+
+      /* Немного стили для сгенерированного Markdown */
+      #answer h1,
+      #answer h2,
+      #answer h3 {
+        margin: 1rem 0 0.5rem;
+        color: #fff;
+      }
+      #answer p {
+        margin: 0.5rem 0;
+      }
+      #answer pre {
+        background: rgba(255, 255, 255, 0.04);
+        padding: 12px;
+        border-radius: 6px;
+        overflow: auto;
+        margin: 0.6rem 0;
+      }
+      #answer code {
+        font-family: monospace;
+        font-size: 0.95em;
+        background: rgba(255, 255, 255, 0.03);
+        padding: 2px 6px;
+        border-radius: 4px;
+      }
+      #answer ul {
+        margin: 0.4rem 0 0.4rem 1.2rem;
+      }
+      #answer strong {
+        font-weight: 700;
+      }
+      #answer em {
+        font-style: italic;
+      }
     </style>
 
-    <!-- Конфигурация MathJax (обязательно до загрузки скрипта) -->
+    <!-- Конфиг MathJax -->
     <script>
       window.MathJax = {
         tex: {
@@ -81,14 +124,9 @@
             ["\\[", "\\]"],
           ],
         },
-        startup: {
-          // Отключаем автоматический typeset, чтобы вручную отрендерить после вставки контента
-          typeset: false,
-        },
+        startup: { typeset: false },
       };
     </script>
-
-    <!-- MathJax -->
     <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
   </head>
 
@@ -102,7 +140,7 @@
     </main>
 
     <script>
-      // Декодируем URL-safe base64 в UTF-8 (работает корректно для unicode)
+      // Декодируем URL-safe base64 в UTF-8
       function base64ToUtf8(str) {
         str = str.replace(/-/g, "+").replace(/_/g, "/");
         while (str.length % 4) str += "=";
@@ -114,6 +152,113 @@
         return new TextDecoder("utf-8").decode(bytes);
       }
 
+      // Экранируем HTML (чтобы не было XSS)
+      function escapeHtml(s) {
+        return s
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;")
+          .replace(/"/g, "&quot;")
+          .replace(/'/g, "&#39;");
+      }
+
+      // Простая безопасная конвертация Markdown -> HTML
+      // Поддерживаем:
+      // - заголовки #..######,
+      // - списки (-, *, +),
+      // - параграфы,
+      // - **жирный**, *курсив*, `inline code`, ```code block```.
+      function markdownToSafeHtml(src) {
+        if (!src) return "";
+
+        // 1) Извлекаем fenced code blocks (```...```) и заменяем на маркеры
+        const codeBlocks = [];
+        let text = src.replace(/```([\s\S]*?)```/g, function (_, code) {
+          const placeholder = "§CODEBLOCK" + codeBlocks.length + "§";
+          codeBlocks.push(code);
+          return "\n" + placeholder + "\n";
+        });
+
+        // 2) Экранируем остальное
+        text = escapeHtml(text);
+
+        // 3) Вставляем inline-модификаторы (bold, italic, inline code) — но не внутри code blocks placeholders
+        // inline code (`...`)
+        text = text.replace(/`([^`]+)`/g, function (_, code) {
+          return "<code>" + code + "</code>";
+        });
+
+        // жирный **text**
+        text = text.replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>");
+
+        // курсив *text* (не жадный)
+        text = text.replace(
+          /(^|[^*])\*([^*]+)\*([^*]|$)/g,
+          function (_, a, b, c) {
+            return (a || "") + "<em>" + b + "</em>" + (c || "");
+          }
+        );
+
+        // 4) Парсим по строкам для заголовков / списков / параграфов
+        const lines = text.split(/\r?\n/);
+        let out = "";
+        let inList = false;
+        for (let i = 0; i < lines.length; i++) {
+          const line = lines[i].trim();
+
+          if (line === "") {
+            if (inList) {
+              out += "</ul>\n";
+              inList = false;
+            }
+            out += "\n";
+            continue;
+          }
+
+          // Заголовки
+          const h = line.match(/^(#{1,6})\s+(.*)$/);
+          if (h) {
+            if (inList) {
+              out += "</ul>\n";
+              inList = false;
+            }
+            const level = h[1].length;
+            out += "<h" + level + ">" + h[2] + "</h" + level + ">\n";
+            continue;
+          }
+
+          // Списки (не вложенные)
+          const li = line.match(/^[-*+]\s+(.*)$/);
+          if (li) {
+            if (!inList) {
+              out += "<ul>\n";
+              inList = true;
+            }
+            out += "<li>" + li[1] + "</li>\n";
+            continue;
+          }
+
+          // Обычная строка — как параграф (собираем подряд идущие строки в один <p>)
+          if (inList) {
+            out += "</ul>\n";
+            inList = false;
+          }
+          out += "<p>" + line + "</p>\n";
+        }
+        if (inList) {
+          out += "</ul>\n";
+          inList = false;
+        }
+
+        // 5) Вставляем обратно code blocks (их содержимое уже экранировано, но для читаемости поместим в <pre><code>)
+        out = out.replace(/§CODEBLOCK(\d+)§/g, function (_, idx) {
+          const code = escapeHtml(codeBlocks[Number(idx)] || "");
+          return "<pre><code>" + code + "</code></pre>";
+        });
+
+        return out;
+      }
+
       const params = new URLSearchParams(window.location.search);
       const data = params.get("data");
       const answerEl = document.getElementById("answer");
@@ -122,19 +267,17 @@
         try {
           const decoded = base64ToUtf8(data);
 
-          // Безопасная вставка — как plain text (MathJax найдёт $...$ внутри текстовых узлов)
-          answerEl.textContent = decoded;
+          // Конвертируем Markdown в безопасный HTML
+          const html = markdownToSafeHtml(decoded);
 
-          // Дождёмся готовности MathJax, затем отрендерим только нужный элемент
+          // Вставляем безопасный HTML
+          answerEl.innerHTML = html;
+
+          // Рендерим MathJax (только внутри answerEl)
           if (window.MathJax && MathJax.startup && MathJax.startup.promise) {
             MathJax.startup.promise
               .then(() => MathJax.typesetPromise([answerEl]))
-              .catch((err) => {
-                console.error("MathJax typeset error:", err);
-              });
-          } else {
-            // На случай, если MathJax недоступен — оставим текст как есть
-            console.warn("MathJax не обнаружен, показываю сырой текст.");
+              .catch((err) => console.error("MathJax typeset error:", err));
           }
         } catch (e) {
           answerEl.textContent = "Ошибка декодирования данных.";
