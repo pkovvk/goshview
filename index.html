@@ -14,6 +14,7 @@
         background: url("background.png") center/cover no-repeat;
         color: #fff;
       }
+
       header {
         position: relative;
         width: 100%;
@@ -25,6 +26,7 @@
         overflow: hidden;
         backdrop-filter: blur(1px);
       }
+
       header::before {
         content: "";
         position: absolute;
@@ -38,6 +40,7 @@
           rgba(0, 0, 0, 0.7) 100%
         );
       }
+
       header > * {
         position: relative;
         z-index: 2;
@@ -47,21 +50,23 @@
         width: auto;
         object-fit: contain;
       }
+
       main {
         padding: 10px;
       }
-      pre {
+
+      #answer {
         background: rgba(0, 0, 0, 0.3);
         backdrop-filter: blur(2px);
         padding: 15px;
         border-radius: 8px;
         overflow-x: auto;
-        color: #fff;
         font-size: 16px;
         white-space: pre-wrap;
         word-break: break-word;
       }
     </style>
+
     <!-- MathJax для LaTeX -->
     <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
   </head>
@@ -71,11 +76,11 @@
     </header>
 
     <main>
-      <pre id="answer">Загрузка...</pre>
+      <div id="answer">Загрузка...</div>
     </main>
 
     <script>
-      // Декодирование URL-safe base64 в UTF-8
+      // Декодируем URL-safe base64 в UTF-8
       function base64ToUtf8(str) {
         str = str.replace(/-/g, "+").replace(/_/g, "/");
         while (str.length % 4) str += "=";
@@ -93,8 +98,8 @@
           const decoded = base64ToUtf8(data);
           const answerEl = document.getElementById("answer");
           // Вставляем текст с LaTeX
-          answerEl.textContent = decoded;
-          // Рендерим формулы через MathJax
+          answerEl.innerHTML = decoded;
+          // Рендерим LaTeX
           MathJax.typesetPromise([answerEl]);
         } catch (e) {
           document.getElementById("answer").textContent =
