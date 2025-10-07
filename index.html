@@ -1,154 +1,17 @@
 <!DOCTYPE html>
-<html lang="ru">
+<html lang="en">
   <head>
-    <meta charset="utf-8" />
-    <title>Ответ бота</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-
-    <style>
-      html,
-      body {
-        margin: 0;
-        padding: 0;
-        min-height: 100%;
-        font-family: Arial, sans-serif;
-        color: #fff;
-        background: url("background.png") center top repeat-y;
-        background-size: cover;
-      }
-      header {
-        height: 70px;
-        display: flex;
-        align-items: center;
-        padding: 12px 20px;
-        box-sizing: border-box;
-      }
-      .logo {
-        max-height: 48px;
-      }
-      main {
-        padding: 12px;
-      }
-      #answer {
-        background: rgba(0, 0, 0, 0.34);
-        padding: 12px;
-        border-radius: 8px;
-        font-size: 15px;
-        line-height: 1.45;
-        white-space: normal;
-        word-break: break-word;
-        max-width: 1100px;
-        margin: 8px auto;
-      }
-      pre {
-        background: rgba(255, 255, 255, 0.03);
-        padding: 8px;
-        border-radius: 6px;
-        overflow: auto;
-        font-size: 13px;
-      }
-      code {
-        font-family: monospace;
-      }
-    </style>
-
-    <!-- Библиотеки -->
-    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/dompurify/dist/purify.min.js"></script>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>goshview</title>
     <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"
       rel="stylesheet"
-      href="https://cdn.jsdelivr.net/npm/katex/dist/katex.min.css"
     />
-    <script src="https://cdn.jsdelivr.net/npm/katex/dist/katex.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/katex/dist/contrib/auto-render.min.js"></script>
   </head>
-
   <body>
-    <header>
-      <img src="logo.png" class="logo" alt="Логотип" />
-    </header>
-
-    <main>
-      <div id="answer">Загрузка...</div>
-    </main>
-
-    <script>
-      // Декодирование base64 URL-safe
-      function base64ToUtf8(str) {
-        str = str.replace(/-/g, "+").replace(/_/g, "/");
-        while (str.length % 4) str += "=";
-        const bin = atob(str);
-        return new TextDecoder("utf-8").decode(
-          Uint8Array.from(bin, (c) => c.charCodeAt(0))
-        );
-      }
-
-      // Преобработка: конвертируем выражения в квадратных скобках в $...$
-      // только если внутри есть характерные для LaTeX символы/команды.
-      function convertLikelyMathBrackets(md) {
-        // не жадный матч, чтобы не захватывать через несколько пар скобок
-        return md.replace(/\[([\s\S]*?)\]/g, (full, inner) => {
-          // если внутри уже есть $ — пропускаем
-          if (inner.includes("$")) return full;
-
-          // критерии "похожести на LaTeX": наличие обратного слэша, ^, _, фигурных скобок, \frac, \sin и т.д.
-          const likelyMath =
-            /\\|[\^_{}]|\\frac|\\sin|\\cos|\\tan|\\alpha|\\beta|\\gamma|\\text|\\cdot/.test(
-              inner
-            );
-
-          if (likelyMath) {
-            // безопасно оборачиваем в inline-делимитеры
-            return "$" + inner + "$";
-          } else {
-            return full; // не трогаем обычные скобки
-          }
-        });
-      }
-
-      const params = new URLSearchParams(window.location.search);
-      const data = params.get("data");
-      const answerEl = document.getElementById("answer");
-
-      if (!data) {
-        answerEl.textContent = "Нет данных для отображения.";
-      } else {
-        try {
-          const decoded = base64ToUtf8(data);
-
-          // 1) предварительная корректировка "квадратных-скобочных" формул
-          const preprocessed = convertLikelyMathBrackets(decoded);
-
-          // 2) Markdown -> HTML и очистка
-          const htmlUnsafe = marked.parse(preprocessed);
-          const html = DOMPurify.sanitize(htmlUnsafe, { ALLOWED_TAGS: false }); // DOMPurify default is fine
-
-          // 3) вставка и рендер LaTeX через KaTeX
-          answerEl.innerHTML = html;
-
-          renderMathInElement(answerEl, {
-            // стандартные делимитеры
-            delimiters: [
-              { left: "$$", right: "$$", display: true },
-              { left: "$", right: "$", display: false },
-              { left: "\\[", right: "\\]", display: true },
-              { left: "\\(", right: "\\)", display: false },
-            ],
-            // оставлять <code> и <pre> без рендеринга (по умолчанию так и есть)
-            ignoredTags: [
-              "script",
-              "noscript",
-              "style",
-              "textarea",
-              "pre",
-              "code",
-            ],
-          });
-        } catch (err) {
-          console.error(err);
-          answerEl.textContent = "Ошибка декодирования/обработки данных.";
-        }
-      }
-    </script>
+    <div id="root"></div>
+    <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>
