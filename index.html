@@ -1,86 +1,102 @@
 <!DOCTYPE html>
 <html lang="ru">
-<head>
-  <meta charset="utf-8" />
-  <title>Решение от бота</title>
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <style>
-    html, body {
-      margin: 0;
-      padding: 0;
-      height: 100%;
-      font-family: Arial, sans-serif;
-      background: url('background.png') center/cover no-repeat;
-      color: #fff;
-    }
-
-    header {
-      position: relative;
-      width: 100%;
-      height: 10vh;
-      display: flex;
-      align-items: center;
-      padding-left: 5vw;
-      box-sizing: border-box;
-      overflow: hidden;
-      backdrop-filter: blur(1px);
-    }
-
-    header::before {
-      content: "";
-      position: absolute;
-      inset: 0;
-      pointer-events: none;
-      z-index: 0;
-      background: linear-gradient(to top, rgba(0,0,0,0) 0%, rgba(0,0,0,0.4) 40%, rgba(0,0,0,0.7) 100%);
-    }
-
-    header > * { position: relative; z-index: 2; }
-
-    .logo { height: 100px; width: auto; object-fit: contain; }
-
-    main { padding: 10px; }
-
-    pre {
-      background: rgba(0,0,0,0.3);
-      backdrop-filter: blur(2px);
-      padding: 15px;
-      border-radius: 8px;
-      overflow-x: auto;
-      color: #fff;
-      font-size: 16px;
-      white-space: pre-wrap;
-      word-break: break-word;
-    }
-  </style>
-</head>
-<body>
-  <header>
-    <img src="logo.png" alt="Логотип" class="logo">
-  </header>
-
-  <main>
-    <pre id="answer">Загрузка...</pre>
-  </main>
-
-  <script>
-    function setAnswer(text) {
-      document.getElementById('answer').textContent = text;
-    }
-
-    // 1️⃣ Попытка через GET-параметр
-    const params = new URLSearchParams(window.location.search);
-    const data = params.get('data');
-    if (data) {
-      try {
-        const decoded = atob(data);
-        setAnswer(decoded);
-      } catch(e) {
-        setAnswer("Ошибка декодирования данных.");
+  <head>
+    <meta charset="utf-8" />
+    <title>Решение от бота</title>
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <style>
+      html,
+      body {
+        margin: 0;
+        padding: 0;
+        height: 100%;
+        font-family: Arial, sans-serif;
+        background: url("background.png") center/cover no-repeat;
+        color: #fff;
       }
-    } else {
-      setAnswer("Нет данных для отображения.");
-    }
-  </script>
-</body>
+
+      header {
+        position: relative;
+        width: 100%;
+        height: 10vh;
+        display: flex;
+        align-items: center;
+        padding-left: 5vw;
+        box-sizing: border-box;
+        overflow: hidden;
+        backdrop-filter: blur(1px);
+      }
+
+      header::before {
+        content: "";
+        position: absolute;
+        inset: 0;
+        pointer-events: none;
+        z-index: 0;
+        background: linear-gradient(
+          to top,
+          rgba(0, 0, 0, 0) 0%,
+          rgba(0, 0, 0, 0.4) 40%,
+          rgba(0, 0, 0, 0.7) 100%
+        );
+      }
+
+      header > * {
+        position: relative;
+        z-index: 2;
+      }
+
+      .logo {
+        height: 100px;
+        width: auto;
+        object-fit: contain;
+      }
+
+      main {
+        padding: 10px;
+      }
+
+      pre {
+        background: rgba(0, 0, 0, 0.3);
+        backdrop-filter: blur(2px);
+        padding: 15px;
+        border-radius: 8px;
+        overflow-x: auto;
+        color: #fff;
+        font-size: 16px;
+        white-space: pre-wrap;
+        word-break: break-word;
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <img src="logo.png" alt="Логотип" class="logo" />
+    </header>
+
+    <main>
+      <pre id="answer">Загрузка...</pre>
+    </main>
+
+    <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+    <script>
+      const params = new URLSearchParams(window.location.search);
+      const data = params.get("data");
+      if (data) {
+        try {
+          // URL-safe base64 обратно в обычный
+          const decoded = atob(data.replace(/-/g, "+").replace(/_/g, "/"));
+          document.getElementById("answer").textContent = decoded;
+          MathJax.typeset(); // рендерим LaTeX
+        } catch (e) {
+          document.getElementById("answer").textContent =
+            "Ошибка декодирования данных.";
+          console.error(e);
+        }
+      } else {
+        document.getElementById("answer").textContent =
+          "Нет данных для отображения.";
+      }
+    </script>
+  </body>
 </html>
