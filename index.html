@@ -5,95 +5,56 @@
     <title>Ответ бота</title>
     <meta name="viewport" content="width=device-width, initial-scale=1" />
 
-    <!-- Стили -->
     <style>
       html,
       body {
         margin: 0;
         padding: 0;
-        height: 100%;
+        min-height: 100%;
         font-family: Arial, sans-serif;
         color: #fff;
         background: url("background.png") center top repeat-y;
         background-size: cover;
       }
-
       header {
-        position: relative;
-        width: 100%;
-        height: 10vh;
+        height: 70px;
         display: flex;
         align-items: center;
-        padding-left: 5vw;
+        padding: 12px 20px;
         box-sizing: border-box;
-        overflow: hidden;
-        backdrop-filter: blur(1px);
       }
-
-      header::before {
-        content: "";
-        position: absolute;
-        inset: 0;
-        pointer-events: none;
-        z-index: 0;
-        background: linear-gradient(
-          to top,
-          rgba(0, 0, 0, 0) 0%,
-          rgba(0, 0, 0, 0.4) 40%,
-          rgba(0, 0, 0, 0.7) 100%
-        );
-      }
-
-      header > * {
-        position: relative;
-        z-index: 2;
-      }
-
       .logo {
-        height: 100px;
-        width: auto;
-        object-fit: contain;
+        max-height: 48px;
       }
-
       main {
-        padding: 20px;
-        box-sizing: border-box;
+        padding: 12px;
       }
-
       #answer {
-        background: rgba(0, 0, 0, 0.3);
-        backdrop-filter: blur(2px);
-        padding: 20px;
+        background: rgba(0, 0, 0, 0.34);
+        padding: 12px;
         border-radius: 8px;
-        font-size: 16px;
-        line-height: 1.6;
+        font-size: 15px;
+        line-height: 1.45;
         white-space: normal;
-        overflow-wrap: break-word;
+        word-break: break-word;
+        max-width: 1100px;
+        margin: 8px auto;
       }
-
       pre {
-        background: rgba(255, 255, 255, 0.1);
-        padding: 10px;
+        background: rgba(255, 255, 255, 0.03);
+        padding: 8px;
         border-radius: 6px;
-        overflow-x: auto;
+        overflow: auto;
+        font-size: 13px;
       }
-
       code {
-        color: #ffcc88;
-      }
-
-      h2,
-      h3 {
-        margin-top: 20px;
-        margin-bottom: 10px;
+        font-family: monospace;
       }
     </style>
 
-    <!-- Markdown + защита + KaTeX -->
+    <!-- Библиотеки -->
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/dompurify/dist/purify.min.js"></script>
-
-    <!-- KaTeX -->
     <link
       rel="stylesheet"
       href="https://cdn.jsdelivr.net/npm/katex/dist/katex.min.css"
@@ -104,7 +65,7 @@
 
   <body>
     <header>
-      <img src="logo.png" alt="Логотип" class="logo" />
+      <img src="logo.png" class="logo" alt="Логотип" />
     </header>
 
     <main>
@@ -112,44 +73,81 @@
     </main>
 
     <script>
-      // Декодирование base64
+      // Декодирование base64 URL-safe
       function base64ToUtf8(str) {
         str = str.replace(/-/g, "+").replace(/_/g, "/");
         while (str.length % 4) str += "=";
-        const bytes = atob(str);
+        const bin = atob(str);
         return new TextDecoder("utf-8").decode(
-          Uint8Array.from(bytes, (c) => c.charCodeAt(0))
+          Uint8Array.from(bin, (c) => c.charCodeAt(0))
         );
+      }
+
+      // Преобработка: конвертируем выражения в квадратных скобках в $...$
+      // только если внутри есть характерные для LaTeX символы/команды.
+      function convertLikelyMathBrackets(md) {
+        // не жадный матч, чтобы не захватывать через несколько пар скобок
+        return md.replace(/\[([\s\S]*?)\]/g, (full, inner) => {
+          // если внутри уже есть $ — пропускаем
+          if (inner.includes("$")) return full;
+
+          // критерии "похожести на LaTeX": наличие обратного слэша, ^, _, фигурных скобок, \frac, \sin и т.д.
+          const likelyMath =
+            /\\|[\^_{}]|\\frac|\\sin|\\cos|\\tan|\\alpha|\\beta|\\gamma|\\text|\\cdot/.test(
+              inner
+            );
+
+          if (likelyMath) {
+            // безопасно оборачиваем в inline-делимитеры
+            return "$" + inner + "$";
+          } else {
+            return full; // не трогаем обычные скобки
+          }
+        });
       }
 
       const params = new URLSearchParams(window.location.search);
       const data = params.get("data");
-
       const answerEl = document.getElementById("answer");
 
-      if (data) {
+      if (!data) {
+        answerEl.textContent = "Нет данных для отображения.";
+      } else {
         try {
           const decoded = base64ToUtf8(data);
 
-          // Преобразуем Markdown → HTML и очищаем
-          const html = DOMPurify.sanitize(marked.parse(decoded));
+          // 1) предварительная корректировка "квадратных-скобочных" формул
+          const preprocessed = convertLikelyMathBrackets(decoded);
 
-          // Вставляем результат
+          // 2) Markdown -> HTML и очистка
+          const htmlUnsafe = marked.parse(preprocessed);
+          const html = DOMPurify.sanitize(htmlUnsafe, { ALLOWED_TAGS: false }); // DOMPurify default is fine
+
+          // 3) вставка и рендер LaTeX через KaTeX
           answerEl.innerHTML = html;
 
-          // Рендерим формулы KaTeX
           renderMathInElement(answerEl, {
+            // стандартные делимитеры
             delimiters: [
               { left: "$$", right: "$$", display: true },
               { left: "$", right: "$", display: false },
+              { left: "\\[", right: "\\]", display: true },
+              { left: "\\(", right: "\\)", display: false },
+            ],
+            // оставлять <code> и <pre> без рендеринга (по умолчанию так и есть)
+            ignoredTags: [
+              "script",
+              "noscript",
+              "style",
+              "textarea",
+              "pre",
+              "code",
             ],
           });
-        } catch (e) {
-          answerEl.textContent = "Ошибка декодирования данных.";
-          console.error(e);
+        } catch (err) {
+          console.error(err);
+          answerEl.textContent = "Ошибка декодирования/обработки данных.";
         }
-      } else {
-        answerEl.textContent = "Нет данных для отображения.";
       }
     </script>
   </body>
