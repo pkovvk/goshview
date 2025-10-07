@@ -7,18 +7,24 @@ import "katex/dist/katex.min.css";
 import "./App.css";
 
 /**
- * remark-плагин: превращает [ ... ] -> inlineMath и [[ ... ]] -> math
- * работает на mdast, не трогает code/pre и учитывает "математические" признаки.
+ * remark-плагин: распознаёт LaTeX-подобные фрагменты в тексте
+ * и превращает их в inlineMath / math узлы mdast.
+ *
+ * Правила:
+ * - Ищем "семена" формул: \xxx, \frac, \text{...}, _{...}, ^{...}, цифры с запятой и пр.
+ * - Расширяем область вокруг такого семени вправо/влево, захватывая операторы, знаки равенства, пробелы, цифры, скобки, \-команды и т.д.
+ * - Нормализуем десятичную запятую внутри математики: 9,8 -> 9.8 (можно отключить, если не нужно).
+ * - Не трогаем узлы типа code / inlineCode / html.
  */
-function remarkBracketMath() {
+function remarkSmartMath({ normalizeCommaInsideMath = true } = {}) {
   return (tree) => {
-    // рекурсивно обходим узлы
+    // рекурсивный обход
     function walk(node) {
       if (!node || !node.children) return;
       for (let i = 0; i < node.children.length; i++) {
         const child = node.children[i];
 
-        // не трогаем код, pre, html и т.п.
+        // безопасно пропускаем блоки кода, inline-код и html
         if (
           child.type === "code" ||
           child.type === "inlineCode" ||
@@ -29,62 +35,105 @@ function remarkBracketMath() {
 
         if (child.type === "text") {
           const text = child.value;
-          // матчим сначала [[...]] (display), затем [...] (inline)
-          const regex = /\[\[([\s\S]*?)\]\]|\[([^\]\[]+?)\]/g;
-          let match;
+
+          // быстрый фильтр: если в тексте нет ничего похожего на LaTeX — пропускаем
+          if (
+            !/[\\\^_\{\}]|\\frac|\\sqrt|\\text\{|\\sin|\\cos|\d,\d/.test(text)
+          ) {
+            continue;
+          }
+
+          // regex для "семян" — места, где наверняка начинается LaTeX-паттерн
+          const seedRe =
+            /\\[a-zA-Z]+|\\frac|\\sqrt|\\text\{|\w+_\{[^}]*\}|\w+\^\{[^}]*\}|\d,\d/gi;
+          let m;
           let lastIndex = 0;
           const newNodes = [];
-          let anyReplace = false;
+          let any = false;
 
-          while ((match = regex.exec(text)) !== null) {
-            const matchStart = match.index;
-            const wholeMatch = match[0];
-            const inner = match[1] ?? match[2]; // group1 => [[...]], group2 => [...]
-            const isDisplay = Boolean(match[1]);
+          while ((m = seedRe.exec(text)) !== null) {
+            const seedIndex = m.index;
 
-            // текст перед совпадением
-            if (matchStart > lastIndex) {
+            // добавляем текст до семени
+            if (seedIndex > lastIndex) {
               newNodes.push({
                 type: "text",
-                value: text.slice(lastIndex, matchStart),
+                value: text.slice(lastIndex, seedIndex),
               });
             }
 
-            // эвристика: внутри должно быть что-то, характерное для LaTeX
-            const isMathLike =
-              /\\|[\^_{}]|\\frac|\\sin|\\cos|\\tan|\\alpha|\\beta|\\gamma|\\sqrt|\\sum|\\int|\\cdot/.test(
-                inner
-              );
-
-            if (isMathLike) {
-              // нормализуем десятичную запятую (только внутри формулы) -> точки
-              const normalized = inner.replace(/(\d),(\d)/g, "$1.$2");
-              if (isDisplay) {
-                newNodes.push({ type: "math", value: normalized });
-              } else {
-                newNodes.push({ type: "inlineMath", value: normalized });
-              }
-              anyReplace = true;
-            } else {
-              // не похоже на формулу — оставляем как есть (с квадратными скобками)
-              newNodes.push({ type: "text", value: wholeMatch });
+            // теперь расширяем фрагмент: возьмём слева/справа от seed набор символов,
+            // которые обычно входят в математическое выражение.
+            // Допустимые символы в расширении:
+            // буквы, цифры, пробелы, знаки + - * / = < > ( ) [ ] { } ^ _ \ . , ° % \text{...} и т.д.
+            // Остановимся на ближайших символах-разделителях (точка, ;, : , перевод строки — возможный конец предложения)
+            const leftLimitChars = ".,;:!?\\n";
+            let start = seedIndex;
+            // идём влево, пока не встретим разделитель предложения (или начало строки)
+            while (start > lastIndex) {
+              const ch = text[start - 1];
+              if (leftLimitChars.includes(ch)) break;
+              start--;
             }
 
-            lastIndex = matchStart + wholeMatch.length;
-          }
+            // идём вправо, пока не встретим разделитель предложения или конец строки
+            let end = seedRe.lastIndex;
+            while (end < text.length) {
+              const ch = text[end];
+              if (leftLimitChars.includes(ch)) break;
+              // если встретили двойной пробел — считаем, что предложение может закончиться
+              if (ch === "\u00A0") break;
+              end++;
+            }
 
-          if (anyReplace) {
-            // остаток после последнего совпадения
+            // Обрезаем пробелы по краям
+            while (start < seedIndex && /\s/.test(text[start])) start++;
+            while (end > seedIndex && /\s/.test(text[end - 1])) end--;
+
+            // Получаем кандидат на формулу
+            let candidate = text.slice(start, end);
+
+            // Уточняем эвристику: кандидат должен содержать хотя бы одну LaTeX-особенность
+            const mathLike =
+              /\\|_|\\frac|\\sqrt|\\text\{|\^|[=<>]|\\sin|\\cos|\\tan|\\alpha|\\beta|\\gamma|\d,\d/.test(
+                candidate
+              );
+
+            if (mathLike) {
+              // Нормализация десятичной запятой только внутри математики
+              if (normalizeCommaInsideMath) {
+                candidate = candidate.replace(/(\d),(\d)/g, "$1.$2");
+              }
+
+              // Если внутри есть перенос строки — считаем display math
+              if (/\n/.test(candidate) || /^\s*\[|\]\s*$/.test(candidate)) {
+                // display math
+                newNodes.push({ type: "math", value: candidate.trim() });
+              } else {
+                newNodes.push({ type: "inlineMath", value: candidate.trim() });
+              }
+              any = true;
+            } else {
+              // Не похоже на математику — вставляем как текст (оставляем исходно)
+              newNodes.push({ type: "text", value: text.slice(start, end) });
+            }
+
+            lastIndex = end;
+            // сдвигаем указатель seedRe, чтобы продолжить поиск дальше
+            seedRe.lastIndex = end;
+          } // while seed
+
+          if (any) {
+            // добавляем остаток
             if (lastIndex < text.length) {
               newNodes.push({ type: "text", value: text.slice(lastIndex) });
             }
-            // заменяем один узел текст на получившиеся узлы
+            // заменяем один узел на массив узлов
             node.children.splice(i, 1, ...newNodes);
-            // сдвигаем индекс, чтобы не пропустить следующие вставленные узлы
             i += newNodes.length - 1;
           }
         } else {
-          // рекурсивно обработать дочерние узлы (параграфы, списки и т.д.)
+          // рекурсивно обработать вложенные узлы (paragraph, strong, emphasis и т.д.)
           walk(child);
         }
       }
@@ -132,7 +181,10 @@ export default function App() {
       <main>
         <div className="answer">
           <ReactMarkdown
-            remarkPlugins={[remarkBracketMath, remarkMath]}
+            remarkPlugins={[
+              [remarkSmartMath, { normalizeCommaInsideMath: true }],
+              remarkMath,
+            ]}
             rehypePlugins={[rehypeKatex]}
           >
             {content}
