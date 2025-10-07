@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <title>Header с градиентом и плавным блюром</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <style>
+    /* Сброс базовых отступов */
+    html, body {
+      margin: 0;
+      padding: 0;
+      height: 100%;
+    }
+
+    /* Фон страницы — пример */
+    body {
+      font-family: Arial, sans-serif;
+      background-image: url('background.png');
+      background-size: cover;          /* покрывает экран, без искажения пропорций */
+      background-repeat: no-repeat;
+      background-position: center center;
+      color: #fff;
+    }
+
+    /* Сам header */
+    header {
+      position: relative;
+      width: 100%;
+      height: 10vh;                   /* требуемая высота */
+      display: flex;
+      align-items: center;             /* вертикальное центрирование содержимого */
+      padding-left: 5vw;              /* логотип 30px от левого края */
+      box-sizing: border-box;
+      overflow: hidden;                /* чтобы псевдоэлементы не выступали */
+      backdrop-filter: blur(1px);
+    }
+
+    /* Градиентный слой: снизу (transparent) -> сверху (black) */
+    header::before {
+      content: "";
+      position: absolute;
+      inset: 0; /* top:0; right:0; bottom:0; left:0; */
+      pointer-events: none;
+      z-index: 0;
+
+      /* Градиент снизу вверх: 0% прозрачности внизу, 100% чёрного сверху */
+      background: linear-gradient(
+        to top,
+        rgba(0,0,0,0) 0%,
+        rgba(0,0,0,0.4) 40%,
+        rgba(0,0,0,0.7) 100%
+      );
+    }
+
+    /* Чтобы контент header (логотип и т.д.) был поверх градиента/блюра */
+    header > * {
+      position: relative;
+      z-index: 2;
+    }
+
+    /* Логотип — по вертикали центр и высота подгоняется */
+    .logo {
+      height: 100px; /* подбери нужный размер логотипа */
+      width: auto;
+      object-fit: contain;
+      display: block;
+    }
+
+    /* Пример основного контента под header */
+    main {
+      padding: 10px;
+    }
+
+    pre {
+      background: rgba(0,0,0,0.3);
+      backdrop-filter: blur(2px);
+      padding: 15px;
+      border-radius: 8px;
+      overflow-x: auto;
+      color: #fff;
+      font-size: 16px;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <img src="logo.png" alt="Логотип" class="logo">
+  </header>
+
+  <main>
+    <pre id="answer">Тут будет текст ответа...</pre>
+  </main>
+
+  <script>
+    const params = new URLSearchParams(window.location.search);
+    const data = params.get('data');
+    if (data) {
+      const decoded = atob(data);
+      document.getElementById('answer').textContent = decoded;
+    } else {
+      document.getElementById('answer').textContent = "Нет данных для отображения.";
+    }
+  </script>
+</body>
+</html>
