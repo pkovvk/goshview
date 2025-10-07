@@ -4,6 +4,7 @@
     <meta charset="utf-8" />
     <title>Ответ бота</title>
     <meta name="viewport" content="width=device-width,initial-scale=1" />
+
     <style>
       html,
       body {
@@ -46,7 +47,7 @@
         z-index: 2;
       }
       .logo {
-        height: 100px;
+        max-height: 8vh;
         width: auto;
         object-fit: contain;
       }
@@ -67,9 +68,30 @@
       }
     </style>
 
-    <!-- MathJax для LaTeX -->
+    <!-- Конфигурация MathJax (обязательно до загрузки скрипта) -->
+    <script>
+      window.MathJax = {
+        tex: {
+          inlineMath: [
+            ["$", "$"],
+            ["\\(", "\\)"],
+          ],
+          displayMath: [
+            ["$$", "$$"],
+            ["\\[", "\\]"],
+          ],
+        },
+        startup: {
+          // Отключаем автоматический typeset, чтобы вручную отрендерить после вставки контента
+          typeset: false,
+        },
+      };
+    </script>
+
+    <!-- MathJax -->
     <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
   </head>
+
   <body>
     <header>
       <img src="logo.png" alt="Логотип" class="logo" />
@@ -80,35 +102,46 @@
     </main>
 
     <script>
-      // Декодируем URL-safe base64 в UTF-8
+      // Декодируем URL-safe base64 в UTF-8 (работает корректно для unicode)
       function base64ToUtf8(str) {
         str = str.replace(/-/g, "+").replace(/_/g, "/");
         while (str.length % 4) str += "=";
-        const bytes = atob(str);
-        return new TextDecoder("utf-8").decode(
-          Uint8Array.from(bytes, (c) => c.charCodeAt(0))
-        );
+        const binary = atob(str);
+        const bytes = new Uint8Array(binary.length);
+        for (let i = 0; i < binary.length; i++) {
+          bytes[i] = binary.charCodeAt(i);
+        }
+        return new TextDecoder("utf-8").decode(bytes);
       }
 
       const params = new URLSearchParams(window.location.search);
       const data = params.get("data");
+      const answerEl = document.getElementById("answer");
 
       if (data) {
         try {
           const decoded = base64ToUtf8(data);
-          const answerEl = document.getElementById("answer");
-          // Вставляем текст с LaTeX
-          answerEl.innerHTML = decoded;
-          // Рендерим LaTeX
-          MathJax.typesetPromise([answerEl]);
+
+          // Безопасная вставка — как plain text (MathJax найдёт $...$ внутри текстовых узлов)
+          answerEl.textContent = decoded;
+
+          // Дождёмся готовности MathJax, затем отрендерим только нужный элемент
+          if (window.MathJax && MathJax.startup && MathJax.startup.promise) {
+            MathJax.startup.promise
+              .then(() => MathJax.typesetPromise([answerEl]))
+              .catch((err) => {
+                console.error("MathJax typeset error:", err);
+              });
+          } else {
+            // На случай, если MathJax недоступен — оставим текст как есть
+            console.warn("MathJax не обнаружен, показываю сырой текст.");
+          }
         } catch (e) {
-          document.getElementById("answer").textContent =
-            "Ошибка декодирования данных.";
+          answerEl.textContent = "Ошибка декодирования данных.";
           console.error(e);
         }
       } else {
-        document.getElementById("answer").textContent =
-          "Нет данных для отображения.";
+        answerEl.textContent = "Нет данных для отображения.";
       }
     </script>
   </body>
